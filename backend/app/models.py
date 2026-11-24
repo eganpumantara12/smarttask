@@ -24,9 +24,11 @@ class User(Base):
     reminder_time: Mapped[str] = mapped_column(String(5), default="08:00", server_default="08:00")
     reminder_sound: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     deadline_alert_hours: Mapped[int] = mapped_column(Integer, default=3, server_default="3")  # 0 = mati
-    is_verified = Column(Boolean, default=False, nullable=False)
-    otp_code = Column(String(6), nullable=True)
-    otp_expires_at = Column(DateTime(timezone=True), nullable=True)
+    # Verifikasi email (OTP)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    otp_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
+    otp_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
 
 class Course(Base):
     __tablename__ = "courses"
@@ -53,8 +55,8 @@ class Task(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     deadline: Mapped[datetime] = mapped_column(UTCDateTime)
     status: Mapped[str] = mapped_column(String(20), default="todo")
+    email_reminded: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 
     course: Mapped[Course] = relationship(back_populates="tasks")
-    email_reminded = Column(Boolean, default=False, nullable=False)

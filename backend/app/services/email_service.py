@@ -6,24 +6,39 @@ import socket
 from email.message import EmailMessage
 from urllib import error, request
 
+from app.services.email_templates import build_deadline_reminder_email, build_otp_email
+
 log = logging.getLogger("app.services.email_service")
 
 
-def _send_via_resend(to_email: str, subject: str, body: str) -> bool:
+def _send_via_resend(
+    to_email: str,
+    subject: str,
+    body: str,
+    html_body: str | None = None,
+) -> bool:
     api_key = os.getenv("RESEND_API_KEY", "").strip()
     if not api_key:
         return False
 
     from_name = os.getenv("SMTP_FROM_NAME", "SmartTask").strip() or "SmartTask"
-    from_email = os.getenv("EMAIL_FROM", "").strip() or os.getenv("SMTP_USER", "").strip() or "onboarding@resend.dev"
+    from_email = (
+        os.getenv("EMAIL_FROM", "").strip()
+        or os.getenv("SMTP_USER", "").strip()
+        or "onboarding@resend.dev"
+    )
     sender = f"{from_name} <{from_email}>" if "<" not in from_email else from_email
 
-    payload = json.dumps({
+    data: dict[str, object] = {
         "from": sender,
         "to": [to_email],
         "subject": subject,
         "text": body,
-    }).encode("utf-8")
+    }
+    if html_body:
+        data["html"] = html_body
+
+    payload = json.dumps(data).encode("utf-8")
 
     req = request.Request(
         "https://api.resend.com/emails",
@@ -79,7 +94,9 @@ def _resolve_ipv4(host: str) -> str:
     return host
 
 
-def _try_smtp(target_host: str, host: str, port: int, user: str, password: str, msg: EmailMessage) -> None:
+def _try_smtp(
+    target_host: str, host: str, port: int, user: str, password: str, msg: EmailMessage
+) -> None:
     if port == 465:
         with smtplib.SMTP_SSL(target_host, 465, timeout=12) as server:
             server.ehlo(host)
@@ -94,9 +111,9 @@ def _try_smtp(target_host: str, host: str, port: int, user: str, password: str, 
             server.send_message(msg)
 
 
-def _send_email(to_email: str, subject: str, body: str) -> bool:
+def _send_email(to_email: str, subject: str, body: str, html_body: str | None = None) -> bool:
     if os.getenv("RESEND_API_KEY", "").strip():
-        return _send_via_resend(to_email, subject, body)
+        return _send_via_resend(to_email, subject, body, html_body=html_body)
 
     cfg = _get_smtp_config()
     if cfg is None:
@@ -109,6 +126,8 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
     msg["From"] = f"{from_name} <{user}>"
     msg["To"] = to_email
     msg.set_content(body)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
 
     target_host = _resolve_ipv4(host)
     ports_to_try = [port] + ([465] if port != 465 else [587])
@@ -127,15 +146,10 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
 
 
 def send_verification_otp(to_email: str, otp_code: str) -> bool:
+    expires_minutes = 15
     subject = "Kode Verifikasi OTP SmartTask"
-    body = (
-        "Halo,\n\n"
-        f"Kode verifikasi OTP akun SmartTask Anda adalah: {otp_code}\n"
-        "Kode ini berlaku selama 15 menit. Jangan bagikan kode ini kepada siapa pun.\n\n"
-        "Salam,\n"
-        "SmartTask"
-    )
-    return _send_email(to_email, subject, body)
+    html_body, text_body = build_otp_email(otp_code=otp_code, expires_minutes=expires_minutes)
+    return _send_email(to_email, subject, text_body, html_body=html_body)
 
 
 def send_task_reminder(
@@ -145,16 +159,10 @@ def send_task_reminder(
     deadline_text: str,
     course_name: str | None = None,
 ) -> bool:
-    course_line = f"Mata Kuliah : {course_name}\n" if course_name else ""
     subject = f"Pengingat Tugas SmartTask: {task_title}"
-    body = (
-        f"Halo {user_name or 'Pengguna'},\n\n"
-        "Tugas Anda mendekati batas waktu:\n"
-        f"Tugas      : {task_title}\n"
-        f"{course_line}"
-        f"Deadline   : {deadline_text}\n\n"
-        "Silakan cek aplikasi SmartTask Anda.\n\n"
-        "Salam,\n"
-        "SmartTask"
+    html_body, text_body = build_deadline_reminder_email(
+        task_title=task_title,
+        course_name=course_name or "Umum",
+        deadline_str=deadline_text,
     )
-    return _send_email(to_email, subject, body)
+    return _send_email(to_email, subject, text_body, html_body=html_body)

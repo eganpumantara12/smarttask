@@ -1,8 +1,17 @@
 import logging
+import random
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.orm import Session
+
+from app.services.email_service import send_verification_otp
 
 from ..database import get_db, utcnow
 from ..deps import get_current_user
@@ -55,3 +64,42 @@ def me(user: User = Depends(get_current_user)):
 def logout(user: User = Depends(get_current_user)):
     # Token bersifat stateless dan berumur pendek; klien membuang token. Server hanya mencatat log.
     log_event(log, "logout", user_id=user.id, result="ok")
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    otp_code: str
+
+
+def _generate_otp() -> str:
+    return f"{random.randint(100000, 999999)}"
+
+@router.post("/verify-email")
+def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)):
+    email_clean = payload.email.strip().lower()
+    user = db.query(User).filter(User.email == email_clean).first()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Akun tidak ditemukan.")
+
+    if getattr(user, "is_verified", False):
+        return {"message": "Email sudah terverifikasi. Silakan login."}
+
+    now = datetime.now(timezone.utc)
+    expires = user.otp_expires_at
+    if expires is not None and expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+
+    if not user.otp_code or user.otp_code != payload.otp_code.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kode OTP salah.")
+
+    if expires is not None and expires < now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kode OTP sudah kedaluwarsa. Silakan daftar ulang untuk mengirim OTP baru.",
+        )
+
+    user.is_verified = True
+    user.otp_code = None
+    user.otp_expires_at = None
+    db.commit()
+
+    return {"message": "Verifikasi email berhasil. Akun Anda sekarang aktif."}

@@ -57,3 +57,4 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 
     course: Mapped[Course] = relationship(back_populates="tasks")
+    email_reminded = Column(Boolean, default=False, nullable=False)

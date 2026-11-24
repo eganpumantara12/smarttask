@@ -138,8 +138,8 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
         )
         
     role_val = getattr(user, "role", "student") or "student"
-        access_token = create_access_token(user.id, role_val)
-        log_event(log, "login", user_id=user.id, result="ok")
+    access_token = create_access_token(user.id, role_val)
+    log_event(log, "login", user_id=user.id, result="ok")
     return {"access_token": access_token, "token_type": "bearer"}
 
 

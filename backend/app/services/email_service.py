@@ -36,6 +36,21 @@ def _resolve_ipv4(host: str) -> str:
     return host
 
 
+def _try_send(target_host: str, host: str, port: int, user: str, password: str, msg: EmailMessage) -> None:
+    if port == 465:
+        with smtplib.SMTP_SSL(target_host, 465, timeout=12) as server:
+            server.ehlo(host)
+            server.login(user, password)
+            server.send_message(msg)
+    else:
+        with smtplib.SMTP(target_host, port, timeout=12) as server:
+            server.ehlo(host)
+            server.starttls()
+            server.ehlo(host)
+            server.login(user, password)
+            server.send_message(msg)
+
+
 def _send_email(to_email: str, subject: str, body: str) -> bool:
     cfg = _get_smtp_config()
     if cfg is None:
@@ -49,24 +64,19 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
     msg.set_content(body)
 
     target_host = _resolve_ipv4(host)
+    ports_to_try = [port] + ([465] if port != 465 else [587])
 
-    try:
-        if port == 465:
-            with smtplib.SMTP_SSL(target_host, port, timeout=15) as server:
-                server.ehlo(host)
-                server.login(user, password)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(target_host, port, timeout=15) as server:
-                server.ehlo(host)
-                server.starttls()
-                server.ehlo(host)
-                server.login(user, password)
-                server.send_message(msg)
-        return True
-    except Exception as exc:
-        log.error("Gagal mengirim email ke %s: %s", to_email, exc)
-        return False
+    last_exc: Exception | None = None
+    for p in ports_to_try:
+        try:
+            _try_send(target_host, host, p, user, password, msg)
+            return True
+        except Exception as exc:
+            last_exc = exc
+            log.warning("Percobaan SMTP ke %s:%s gagal (%s), mencoba jalur alternatif...", host, p, exc)
+
+    log.error("Gagal mengirim email ke %s: %s", to_email, last_exc)
+    return False
 
 
 def send_verification_otp(to_email: str, otp_code: str) -> bool:

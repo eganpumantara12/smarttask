@@ -1,8 +1,14 @@
+from app.services.reminder_worker import start_scheduler
+
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.services.email_service import send_task_reminder_email
+
+@app.on_event("startup")
+def on_startup():
+    start_scheduler()
 
 scheduler = BackgroundScheduler()
 

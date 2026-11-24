@@ -3,13 +3,43 @@ import { Auth } from '../api'
 import { ErrorNote, Field, Logo } from '../components/ui.jsx'
 
 export default function AuthPage({ onAuthed }) {
+  const [otpStep, setOtpStep] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
   const [mode, setMode] = useState('login')
   const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
   const isLogin = mode === 'login'
+  
+function handleRegisterSuccess(email) {
+  setPendingEmail(email);
+  setOtpCode("");
+  setOtpStep(true);
+  setAuthMessage("Kode OTP 6 digit telah dikirim ke email Anda. Silakan cek kotak masuk atau folder spam.");
+}
 
+// Dipanggil saat tombol "Verifikasi Email" diklik:
+async function handleVerifyOtp(e) {
+  e.preventDefault();
+  setAuthMessage("");
+  const res = await fetch(`${API_BASE_URL}/api/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: pendingEmail, otp_code: otpCode }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    setAuthMessage(data.detail || "Verifikasi OTP gagal.");
+    return;
+  }
+  setOtpStep(false);
+  setMode("login"); // arahkan ke tab Masuk
+  setAuthMessage("Email berhasil diverifikasi! Silakan login dengan akun Anda.");
+  }
+  
   const submit = async (e) => {
     e.preventDefault()
     setError('')

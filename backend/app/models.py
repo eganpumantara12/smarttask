@@ -24,7 +24,9 @@ class User(Base):
     reminder_time: Mapped[str] = mapped_column(String(5), default="08:00", server_default="08:00")
     reminder_sound: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     deadline_alert_hours: Mapped[int] = mapped_column(Integer, default=3, server_default="3")  # 0 = mati
-
+    is_verified = Column(Boolean, default=False, nullable=False)
+    otp_code = Column(String(6), nullable=True)
+    otp_expires_at = Column(DateTime(timezone=True), nullable=True)
 
 class Course(Base):
     __tablename__ = "courses"
